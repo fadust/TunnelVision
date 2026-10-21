@@ -2,6 +2,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:canon": "node canon/tests/port.mjs && node --experimental-vm-modules canon/tests/runtime.mjs && node canon/tests/integration.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

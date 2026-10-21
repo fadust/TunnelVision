@@ -1,0 +1,37 @@
+{
+  "card": {
+    "name": "Ari Vale",
+    "description": "Original background: Ari Vale was a fire apprentice, aged 16 in year 410. This reimagining replaces that profession and ability: Ari Vale is now a healer who uses storm magic. Original fire abilities must not fill gaps in this version.",
+    "personality": "Ari Vale is deliberate and speaks softly.",
+    "scenario": "The world is four years later, in year 414. Ari Vale is 20. Mira Vale is Ari's mother; Cato Vale is Ari's younger sibling. No later power rank has been established."
+  },
+  "sources": [
+    {"id":"card:description","kind":"card","text":"Original background: Ari Vale was a fire apprentice, aged 16 in year 410. This reimagining replaces that profession and ability: Ari Vale is now a healer who uses storm magic. Original fire abilities must not fill gaps in this version."},
+    {"id":"card:personality","kind":"card","text":"Ari Vale is deliberate and speaks softly."},
+    {"id":"card:scenario","kind":"card","text":"The world is four years later, in year 414. Ari Vale is 20. Mira Vale is Ari's mother; Cato Vale is Ari's younger sibling. No later power rank has been established."},
+    {"id":"book:original:1","kind":"lorebook","world":"Original","uid":1,"text":"In year 410, Ari Vale is 16, his mother Mira Vale is 40, and his younger sibling Cato Vale is 12. Ari Vale is a fire apprentice. Greyhaven stands beside the river."},
+    {"id":"book:original:2","kind":"lorebook","world":"Original","uid":2,"text":"Ari Senn, also called Ari, is Greyhaven's headmistress."}
+  ],
+  "analysis": {
+    "entities": [
+      {"id":"ari-vale","name":"Ari Vale","type":"character","aliases":["Ari"],"reimagined":true,"dependencies":["mira","cato"]},
+      {"id":"mira","name":"Mira Vale","type":"character","aliases":[],"dependencies":["ari-vale"]},
+      {"id":"cato","name":"Cato Vale","type":"character","aliases":[],"dependencies":["ari-vale"]},
+      {"id":"ari-senn","name":"Ari Senn","type":"character","aliases":["Ari"],"dependencies":["greyhaven"]},
+      {"id":"greyhaven","name":"Greyhaven","type":"location","aliases":[],"dependencies":[]}
+    ],
+    "facts": [
+      {"entity":"ari-vale","source":"card:description","quote":"Ari Vale is now a healer who uses storm magic.","compatible":true,"phase":"current"},
+      {"entity":"ari-vale","source":"card:personality","quote":"Ari Vale is deliberate and speaks softly.","compatible":true,"phase":"current"},
+      {"entity":"ari-vale","source":"card:scenario","quote":"Ari Vale is 20.","compatible":true,"phase":"current"},
+      {"entity":"ari-vale","source":"book:original:1","quote":"Ari Vale is a fire apprentice.","compatible":false,"phase":"original"},
+      {"entity":"greyhaven","source":"book:original:1","quote":"Greyhaven stands beside the river.","compatible":true,"phase":"current"},
+      {"entity":"mira","source":"book:original:1","quote":"his mother Mira Vale is 40","compatible":true,"phase":"original","age":40,"year":410},
+      {"entity":"cato","source":"book:original:1","quote":"his younger sibling Cato Vale is 12","compatible":true,"phase":"original","age":12,"year":410},
+      {"entity":"ari-senn","source":"book:original:2","quote":"Ari Senn, also called Ari, is Greyhaven's headmistress.","compatible":true,"phase":"current"},
+      {"entity":"ari-vale","source":"card:scenario","quote":"Mira Vale is Ari's mother; Cato Vale is Ari's younger sibling.","compatible":true,"phase":"current"}
+    ],
+    "timeShift":{"source":"card:scenario","quote":"The world is four years later, in year 414.","fromYear":410,"toYear":414,"kind":"world"},
+    "proposals":[{"entity":"ari-vale","text":"Ari may have developed greater healing skill during the four years; his later power rank requires review.","basis":["card:description","card:scenario"]}]
+  }
+}
