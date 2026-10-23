@@ -26,6 +26,8 @@ Run `npm run test:canon` with the companion NPC Codex checkout at `../npc_codex`
 
 ## Full interface restoration — 23 October
 
+Canon source analysis honours the configured sidecar response limit. It previously capped each analysis response at 8,192 tokens even with a larger saved profile, truncating MiniMax M3 output for a real 27-entry book. The scanner fallback retains its 8,192-token limit; source validation, truncation rejection and NPC admission guards are unchanged. The Canon integration workflow runs the canon suites and 73 focused interface/provider checks against the pinned companion Codex revision.
+
 This supersedes the original restricted-UI design. Saved settings/data are retained; the runtime reads overlapping writer flags as false without resetting the saved values. Writer event processors and cleanup/hydration are not started. Disabled controls remain visible with an ownership explanation.
 
 | Retained | Canon-compatible behavior |

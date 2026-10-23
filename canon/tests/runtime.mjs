@@ -9,6 +9,7 @@ let books = { Original: { entries: Object.fromEntries(fixture.sources.filter(s =
 const database = new Map(), vectors = new Map(), events = new Map(), prompts = new Map(), summaries = [];
 let providerCalls = 0, embeddingCalls = 0, dbFailure = false, delayProvider = null, delaySearch = false;
 let conditionalMet = false;
+let analysisMaxTokens;
 const ctx = { characterId: 0, characters: [{ ...fixture.card, avatar: 'ari.png' }], getCurrentChatId: () => 'fixture',
     extensionSettings: { npc_state_delta: { scannerConnectionProfile: 'fixture-profile' } },
     getRequestHeaders: () => ({}), getTokenCountAsync: async text => Math.ceil(text.length / 4),
@@ -43,7 +44,7 @@ const stubs = {
     'lore-llm-client.js': { sendLoreRequest: async (_system, prompt, options) => {
         options.onRequest?.(); assert.equal(options.profileId, 'fixture-profile');
         if (delayProvider) await delayProvider;
-        const input = JSON.parse(prompt); if (input.tree) return JSON.stringify({ revision: input.revision, ids: [], conditional_evaluations: (input.conditions || []).map(c => ({ evidence_id: c.evidence_id, met: conditionalMet })) }); providerCalls++; const analysis = structuredClone(fixture.analysis);
+        const input = JSON.parse(prompt); if (input.tree) return JSON.stringify({ revision: input.revision, ids: [], conditional_evaluations: (input.conditions || []).map(c => ({ evidence_id: c.evidence_id, met: conditionalMet })) }); analysisMaxTokens = options.maxTokens; providerCalls++; const analysis = structuredClone(fixture.analysis);
         const remap = id => id.replace('card:', 'card:ari.png:').replace('book:original:', 'book:Original:');
         analysis.facts = analysis.facts.map(f => ({ ...f, source: remap(f.source) })).filter(f => input.sources.some(s => s.id === f.source && s.text.includes(f.quote)));
         analysis.timeShift.source = remap(analysis.timeShift.source);
@@ -69,6 +70,7 @@ const module = await load(new URL('../context/semantic-canon.js', import.meta.ur
 const runtime = module.namespace;
 await runtime.analyzeCanonSources();
 assert.equal(state.layer1Analysis.status, 'ready');
+assert.equal(analysisMaxTokens, 8192, 'Scanner fallback keeps its existing analysis limit');
 assert.equal(state.layer1Analysis.proposalsCreated, 1);
 assert.equal(state.pendingLoreEntries.length, 1);
 const requests = providerCalls, embeddings = embeddingCalls;
@@ -169,6 +171,10 @@ delaySearch = true; const start = performance.now();
 assert.equal((await runtime.querySemanticCanon('unrelated submarine', { purpose: 'identity' })).status, 'unavailable');
 assert.ok(performance.now() - start < 3075, 'One three-second deadline bounds the complete retrieval loop');
 delaySearch = false;
+settings.tunnelvision.sidecarProfile = { maxTokens: 32192 };
+ctx.characters[0].personality += ' A source change for the configured sidecar limit.';
+runtime.invalidateCanon(); await runtime.analyzeCanonSources();
+assert.equal(analysisMaxTokens, 32192, 'Canon analysis honours the existing sidecar response setting');
 let release; delayProvider = new Promise(resolve => { release = resolve; });
 ctx.characters[0].personality += ' New source revision.'; runtime.invalidateCanon();
 const stale = runtime.analyzeCanonSources();

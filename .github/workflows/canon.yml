@@ -1,0 +1,33 @@
+name: Canon integration
+
+on:
+  push:
+    branches: [codex/canon-evidence]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: TunnelVision
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: TunnelVision
+      - uses: actions/checkout@v5
+        with:
+          repository: fadust/npc-codex
+          ref: 6e5102c61ef03483c225b0c9899af980b6207508
+          path: npc_codex
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: npm install --ignore-scripts --package-lock=false
+      - run: npm run test:canon
+      - run: npx vitest run tests/canon-interface.test.js tests/llm-sidecar.test.js
