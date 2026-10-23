@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { compileCanon, retrieveCanon } from '../context/layer1-model.js';
+import { analysisPassages, expandAnalysisPassages, compileCanon, retrieveCanon } from '../context/layer1-model.js';
 import { evidenceTree, validateSelection } from '../context/tree-selection.js';
 import { getSettings, getState, saveState } from '../state/state-manager.js';
 import { sendLoreRequest } from '../providers/lore-llm-client.js';
 import { getInjectableLoreEntriesForInjection } from '../lorecards/lore-injection-filter.js';
 
 const fixture = JSON.parse(await readFile(new URL('./fixtures/layer1-ari.json', import.meta.url)));
+const quotedSource = [{ id: 'source', kind: 'card', text: 'Nami says "watch the sea".\nShe keeps the chart.\n' + 'x'.repeat(1300) }];
+const numbered = analysisPassages(quotedSource);
+assert.ok(numbered[0].passages.every(p => p.text.length <= 600 && quotedSource[0].text.includes(p.text)));
+assert.equal(numbered[0].passages.map(p => p.text).join('').replace(/\s/g, ''), quotedSource[0].text.replace(/\s/g, ''));
+const referenced = { entities: [{ id: 'nami', name: 'Nami', type: 'character' }], facts: [{ entity: 'nami', passage: 'p0', compatible: true, phase: 'current', source: 'invented', quote: 'untrusted replacement' }] };
+const expanded = expandAnalysisPassages(referenced, numbered);
+assert.equal(expanded.facts[0].quote, 'Nami says "watch the sea".');
+assert.equal(expanded.facts[0].source, 'source');
+assert.equal((await compileCanon(quotedSource, expanded, 'passage-revision')).status, 'ready');
+assert.throws(() => expandAnalysisPassages({ ...referenced, facts: [{ ...referenced.facts[0], passage: 'unknown' }] }, numbered), /Unknown canon passage/);
 const view = await compileCanon(fixture.sources, fixture.analysis, 'revision-1');
 const tree = evidenceTree(view.evidence);
 assert.ok(!JSON.stringify(tree).includes('fire apprentice'));

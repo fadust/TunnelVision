@@ -2,7 +2,7 @@ import { getSettings, getState, saveState } from '../state/state-manager.js';
 import { sendLoreRequest } from '../providers/lore-llm-client.js';
 import { evidenceTree, validateSelection, SELECTION_PROMPT } from './tree-selection.js';
 import { buildCanonQuery } from './semantic-canon-index.js';
-import { canonHash, compileCanon, analysisSummary, retrieveCanon, formatCanonEvidence, CANON_ANALYSIS_PROMPT, CANON_SCHEMA_VERSION } from './layer1-model.js';
+import { canonHash, compileCanon, analysisPassages, expandAnalysisPassages, analysisSummary, retrieveCanon, formatCanonEvidence, CANON_ANALYSIS_PROMPT, CANON_SCHEMA_VERSION } from './layer1-model.js';
 import { createCanonStore } from './layer1-store.js';
 import { getInjectableLoreEntriesForInjection, getLoreEntryInjectionContextGate } from '../lorecards/lore-injection-filter.js';
 import { separateConditions, hasEvaluableConditions, mapSelectiveLogic } from '../../conditions.js';
@@ -173,22 +173,32 @@ export async function analyzeCanonSources({ force = false } = {}) {
             if (!batches.length) batches.push(cardRows);
             const analysis = { entities: [], facts: [], proposals: [], timeShift: null };
             for (const batchRows of batches) {
-                const cleanRows = batchRows.map(({ rules, ...s }) => s);
+                const cleanRows = analysisPassages(batchRows);
                 const batchKey = await canonHash([cleanRows, context, profile, CANON_ANALYSIS_PROMPT]);
                 let part = await store.get('source-analysis', batchKey, signal);
                 if (part) metrics.analysisCacheHits++;
                 else {
                     const prompt = JSON.stringify({ sources: cleanRows, context });
                     metrics.analysisInputEstimatedTokens += Math.ceil((CANON_ANALYSIS_PROMPT.length + prompt.length) / 4);
-                    const response = await sendLoreRequest(CANON_ANALYSIS_PROMPT, prompt, { profileId, signal, maxTokens: settings.tunnelvision?.sidecarProfile?.maxTokens || 8192, maxRetries: 0,
-                        onRequest: () => { metrics.analysisCalls++; }, onUsage: usage => {
-                            if (Number.isFinite(usage?.prompt_tokens)) metrics.providerReportedInputTokens = (metrics.providerReportedInputTokens || 0) + usage.prompt_tokens;
-                            if (Number.isFinite(usage?.completion_tokens)) metrics.providerReportedOutputTokens = (metrics.providerReportedOutputTokens || 0) + usage.completion_tokens;
-                        } });
-                    signal.throwIfAborted();
-                    const raw = typeof response === 'string' ? response : response?.content;
-                    part = JSON.parse(String(raw).replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, ''));
-                    await compileCanon(batchRows, part, key);
+                    let failure;
+                    for (let attempt = 0; attempt < 2; attempt++) {
+                        const response = await sendLoreRequest(CANON_ANALYSIS_PROMPT, failure ? JSON.stringify({ sources: cleanRows, context, validationError: failure }) : prompt, { profileId, signal, maxTokens: settings.tunnelvision?.sidecarProfile?.maxTokens || 8192, maxRetries: 0,
+                            onRequest: () => { metrics.analysisCalls++; }, onUsage: usage => {
+                                if (Number.isFinite(usage?.prompt_tokens)) metrics.providerReportedInputTokens = (metrics.providerReportedInputTokens || 0) + usage.prompt_tokens;
+                                if (Number.isFinite(usage?.completion_tokens)) metrics.providerReportedOutputTokens = (metrics.providerReportedOutputTokens || 0) + usage.completion_tokens;
+                            } });
+                        signal.throwIfAborted();
+                        const raw = typeof response === 'string' ? response : response?.content;
+                        try {
+                            part = expandAnalysisPassages(JSON.parse(String(raw).replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')), cleanRows);
+                            const checked = await compileCanon(batchRows, part, key);
+                            if (checked.status !== 'ready') throw new Error(`Incomplete evidence: ${checked.rejected} rejected checks; every entity needs compatible support and declared dependencies`);
+                            break;
+                        } catch (error) {
+                            if (attempt) throw error;
+                            failure = error.message;
+                        }
+                    }
                     await store.set('source-analysis', batchKey, part, signal);
                 }
                 const ids = new Map();

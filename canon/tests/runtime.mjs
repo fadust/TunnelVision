@@ -10,6 +10,7 @@ const database = new Map(), vectors = new Map(), events = new Map(), prompts = n
 let providerCalls = 0, embeddingCalls = 0, dbFailure = false, delayProvider = null, delaySearch = false;
 let conditionalMet = false;
 let analysisMaxTokens;
+let malformedResponses = 0;
 const ctx = { characterId: 0, characters: [{ ...fixture.card, avatar: 'ari.png' }], getCurrentChatId: () => 'fixture',
     extensionSettings: { npc_state_delta: { scannerConnectionProfile: 'fixture-profile' } },
     getRequestHeaders: () => ({}), getTokenCountAsync: async text => Math.ceil(text.length / 4),
@@ -45,10 +46,15 @@ const stubs = {
         options.onRequest?.(); assert.equal(options.profileId, 'fixture-profile');
         if (delayProvider) await delayProvider;
         const input = JSON.parse(prompt); if (input.tree) return JSON.stringify({ revision: input.revision, ids: [], conditional_evaluations: (input.conditions || []).map(c => ({ evidence_id: c.evidence_id, met: conditionalMet })) }); analysisMaxTokens = options.maxTokens; providerCalls++; const analysis = structuredClone(fixture.analysis);
+        if (malformedResponses-- > 0) return '{"entities":[}';
         const remap = id => id.replace('card:', 'card:ari.png:').replace('book:original:', 'book:Original:');
-        analysis.facts = analysis.facts.map(f => ({ ...f, source: remap(f.source) })).filter(f => input.sources.some(s => s.id === f.source && s.text.includes(f.quote)));
-        analysis.timeShift.source = remap(analysis.timeShift.source);
-        analysis.proposals = analysis.proposals.map(p => ({ ...p, basis: p.basis.map(remap) }));
+        const passage = (source, quote) => input.sources.find(s => s.id === remap(source))?.passages.find(p => p.text.includes(quote))?.id;
+        analysis.facts = analysis.facts.map(({ source, quote, ...f }) => ({ ...f, passage: passage(source, quote) })).filter(f => f.passage);
+        analysis.entities = analysis.entities.filter(e => analysis.facts.some(f => f.entity === e.id && f.compatible));
+        analysis.entities.forEach(e => { e.dependencies = e.dependencies.filter(id => analysis.entities.some(other => other.id === id)); });
+        analysis.timeShift = { ...analysis.timeShift, passage: passage(analysis.timeShift.source, analysis.timeShift.quote) };
+        delete analysis.timeShift.source; delete analysis.timeShift.quote;
+        analysis.proposals = analysis.proposals.map(p => ({ ...p, basis: input.sources.filter(s => p.basis.some(b => remap(b) === s.id)).map(s => s.passages[0].id) }));
         return JSON.stringify(analysis);
     } },
     'lore-timeline.js': { recordLoreTimelineEvent: (_state, event) => summaries.push(event.patch.layer1Analysis) },
@@ -171,6 +177,22 @@ delaySearch = true; const start = performance.now();
 assert.equal((await runtime.querySemanticCanon('unrelated submarine', { purpose: 'identity' })).status, 'unavailable');
 assert.ok(performance.now() - start < 3075, 'One three-second deadline bounds the complete retrieval loop');
 delaySearch = false;
+malformedResponses = 1;
+ctx.characters[0].personality += ' Corrected provider output.';
+runtime.invalidateCanon();
+const beforeRetry = providerCalls;
+await runtime.analyzeCanonSources();
+assert.equal(state.layer1Analysis.status, 'ready');
+assert.equal(providerCalls, beforeRetry + 2, 'Malformed JSON gets one bounded correction request');
+malformedResponses = 2;
+ctx.characters[0].personality += ' Persistently malformed provider output.';
+runtime.invalidateCanon();
+const beforeFailure = providerCalls;
+await runtime.analyzeCanonSources();
+assert.equal(state.layer1Analysis.status, 'failed');
+assert.equal(providerCalls, beforeFailure + 2, 'A second malformed response stays failed');
+assert.equal((await runtime.querySemanticCanon('New Unknown', { purpose: 'identity' })).status, 'unavailable');
+await runtime.analyzeCanonSources();
 settings.tunnelvision.sidecarProfile = { maxTokens: 32192 };
 ctx.characters[0].personality += ' A source change for the configured sidecar limit.';
 runtime.invalidateCanon(); await runtime.analyzeCanonSources();
