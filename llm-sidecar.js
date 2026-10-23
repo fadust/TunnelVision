@@ -158,9 +158,9 @@ async function _fetchJson(url, options, label) {
     if (tracked) _activeFetches.add(controller);
     let response;
     try {
-        response = await fetch(url, { ...options, signal: controller.signal });
+        response = await fetch(url, { ...options, signal: options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal });
     } catch (error) {
-        if (error?.name === 'AbortError') {
+        if (error?.name === 'AbortError' || options.signal?.aborted) {
             if (timedOut) {
                 // A bare AbortError reads as "signal is aborted without reason" — name the timeout.
                 throw new Error(`${label} timed out after ${SIDECAR_DEFAULT_TIMEOUT_MS / 1000}s — the sidecar endpoint did not respond in time.`);
@@ -203,7 +203,8 @@ function _modelsBase(endpoint) {
  * @param {{prompt:string, systemPrompt?:string}} opts
  * @returns {Promise<string>}
  */
-export async function sidecarGenerate({ prompt, systemPrompt }) {
+export async function sidecarGenerate({ prompt, systemPrompt, signal, maxTokens: requestedMaxTokens }) {
+    signal?.throwIfAborted();
     if (isCircuitOpen()) {
         throw new Error('Sidecar circuit breaker open — too many consecutive failures. Check the Sidecar LLM configuration.');
     }
@@ -211,15 +212,16 @@ export async function sidecarGenerate({ prompt, systemPrompt }) {
     if (!config) {
         throw new Error('Sidecar not configured: enable and fill in the Sidecar LLM profile in TunnelVision settings.');
     }
-    const { endpoint, apiKey, model, format, maxTokens, temperature } = config;
+    const { endpoint, apiKey, model, format, temperature } = config;
+    const maxTokens = Math.min(requestedMaxTokens || config.maxTokens, config.maxTokens);
     try {
         let result;
         if (format === 'anthropic') {
-            result = await _callAnthropic({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens });
+            result = await _callAnthropic({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal });
         } else if (format === 'google') {
-            result = await _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens });
+            result = await _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal });
         } else {
-            result = await _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens });
+            result = await _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal });
         }
         _recordSuccess();
         return typeof result === 'string' ? result.replace(THINK_BLOCK_RE, '').trim() : result;
@@ -230,7 +232,7 @@ export async function sidecarGenerate({ prompt, systemPrompt }) {
     }
 }
 
-async function _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens }) {
+async function _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal }) {
     const url = _normalizeChatEndpoint(endpoint);
     const headers = { 'Content-Type': 'application/json' };
     // Omitted rather than sent empty: `Bearer ` with no credential is malformed,
@@ -245,16 +247,19 @@ async function _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temp
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     messages.push({ role: 'user', content: prompt });
     const data = await _fetchJson(url, {
+        signal,
         method: 'POST',
         headers,
         body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
     }, 'Sidecar');
+    if (data.choices?.[0]?.finish_reason === 'length') throw new Error('Sidecar response was truncated');
     return data.choices?.[0]?.message?.content || '';
 }
 
-async function _callAnthropic({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens }) {
+async function _callAnthropic({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal }) {
     const url = /\/messages$/.test(endpoint) ? endpoint : endpoint.replace(/\/+$/, '') + '/messages';
     const data = await _fetchJson(url, {
+        signal,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -272,13 +277,15 @@ async function _callAnthropic({ endpoint, apiKey, model, systemPrompt, prompt, t
     const block = Array.isArray(data.content)
         ? data.content.find(b => b.type === 'text' || typeof b.text === 'string')
         : null;
+    if (data.stop_reason === 'max_tokens') throw new Error('Sidecar response was truncated');
     return block?.text || '';
 }
 
-async function _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens }) {
+async function _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal }) {
     const url = `${_modelsBase(endpoint)}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const fullPrompt = systemPrompt ? `${systemPrompt}\n\n---\n\n${prompt}` : prompt;
     const data = await _fetchJson(url, {
+        signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -286,6 +293,7 @@ async function _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temp
             generationConfig: { temperature, maxOutputTokens: maxTokens },
         }),
     }, 'Sidecar');
+    if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw new Error('Sidecar response was truncated');
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
@@ -296,23 +304,24 @@ async function _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temp
  * @param {string[]} texts
  * @returns {Promise<number[][]>}
  */
-export async function computeEmbeddings(texts) {
+export async function computeEmbeddings(texts, { signal } = {}) {
     const config = getEmbeddingConfig();
     if (!config) {
         throw new Error('Embedding not configured: enable and fill in the Embedding profile in TunnelVision settings.');
     }
     const { endpoint, apiKey, model, format } = config;
     if (format === 'google' || format === 'gemini') {
-        return _embedGoogle({ endpoint, apiKey, model, texts });
+        return _embedGoogle({ endpoint, apiKey, model, texts, signal });
     }
-    return _embedOpenAI({ endpoint, apiKey, model, texts });
+    return _embedOpenAI({ endpoint, apiKey, model, texts, signal });
 }
 
-async function _embedOpenAI({ endpoint, apiKey, model, texts }) {
+async function _embedOpenAI({ endpoint, apiKey, model, texts, signal }) {
     const url = /\/embeddings$/.test(endpoint) ? endpoint : endpoint.replace(/\/+$/, '') + '/embeddings';
     const headers = { 'Content-Type': 'application/json' };
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
     const data = await _fetchJson(url, {
+        signal,
         method: 'POST',
         headers,
         body: JSON.stringify({ model, input: texts }),
@@ -320,10 +329,11 @@ async function _embedOpenAI({ endpoint, apiKey, model, texts }) {
     return (data.data || []).map(d => d.embedding);
 }
 
-async function _embedGoogle({ endpoint, apiKey, model, texts }) {
+async function _embedGoogle({ endpoint, apiKey, model, texts, signal }) {
     const url = `${_modelsBase(endpoint)}/${model}:batchEmbedContents?key=${encodeURIComponent(apiKey)}`;
     const requests = texts.map(text => ({ model: `models/${model}`, content: { parts: [{ text }] } }));
     const data = await _fetchJson(url, {
+        signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requests }),

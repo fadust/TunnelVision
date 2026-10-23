@@ -10,6 +10,7 @@
  */
 
 import { generateRaw as _generateRaw } from '../../../../script.js';
+import { canonOwnershipActive, OWNERSHIP_NOTICE } from './canon/ownership.js';
 import { getContext } from '../../../st-context.js';
 import { loadWorldInfo } from '../../../world-info.js';
 import { isSidecarConfigured, sidecarGenerate } from './llm-sidecar.js';
@@ -1007,6 +1008,7 @@ async function parseLLMTreeResponse(lorebookName, response, entryUids) {
  * @returns {Promise<{created: number, errors: number}>}
  */
 export async function ingestChatMessages(lorebookName, options) {
+    if (canonOwnershipActive()) throw new Error(OWNERSHIP_NOTICE);
     return withSidecarOrCurrentApi(() => _ingestChatMessages(lorebookName, options));
 }
 

@@ -48,7 +48,7 @@ controller.abort(); await assert.rejects(waiting);
 
 const manifest = JSON.parse(await readFile(new URL('../../manifest.json', import.meta.url)));
 assert.equal(manifest.js, 'canon-main.js');
-// Traverse actual runtime imports, including lazy imports. No upstream writer can initialize.
+// Traverse the restored runtime to catch missing packaged modules.
 const visited = new Set();
 async function inspect(url) {
     if (visited.has(url.href)) return;
@@ -58,9 +58,10 @@ async function inspect(url) {
         const spec = match[1]; if (!spec.startsWith('.')) continue;
         const dependency = new URL(spec, url);
         if (!dependency.pathname.includes('/TunnelVision/')) continue;
-        assert.ok(!/\/(tools|sidecar-writer|post-turn-processor|world-state|smart-context|memory-lifecycle|auto-summary|commands|entry-manager)(\/|\.js)/.test(dependency.pathname), `Writer imported: ${dependency}`);
         await inspect(dependency);
     }
 }
 await inspect(new URL('../../canon-main.js', import.meta.url));
-console.log(`Canon port passed: filtered tree, broad selection, revision/ID rejection, identity states, settings preservation, stale save, context gates, provider cancellation, and ${visited.size}-module no-writer runtime.`);
+const entry = await readFile(new URL('../../canon-main.js', import.meta.url), 'utf8');
+assert.ok(entry.indexOf('enableCanonOwnership();') < entry.indexOf("await import('./index.js')"));
+console.log(`Canon port passed: filtered tree, broad selection, revision/ID rejection, identity states, settings preservation, stale save, context gates, provider cancellation, and ${visited.size} packaged runtime modules. Writer activation is checked in the ownership suite.`);

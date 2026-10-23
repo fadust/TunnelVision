@@ -21,6 +21,8 @@
  */
 
 import { getContext } from '../../../st-context.js';
+import { canonOwnershipActive, OWNERSHIP_NOTICE } from './canon/ownership.js';
+import { getCanonSearchDefinition } from './canon/search.js';
 import { loadWorldInfo } from '../../../world-info.js';
 import { canReadBook, canWriteBook, getSettings, getSelectedLorebook, getTree, createTreeNode, saveTree, findNodeById, consolidateSiblingNodes } from './tree-store.js';
 import { getActiveTunnelVisionBooks, resolveTargetBook } from './tool-registry.js';
@@ -75,6 +77,10 @@ function registerSlashCommands() {
 function wrapCallback(handler) {
     return async function (namedArgs, unnamedArg) {
         try {
+            if (canonOwnershipActive() && [handleRemember, handleSummarize, handleForget, handleIngestCommand].includes(handler)) {
+                toastr.info(OWNERSHIP_NOTICE, 'TunnelVision');
+                return '';
+            }
             const settings = getSettings();
             if (settings.globalEnabled === false) {
                 toastr.warning('TunnelVision is disabled.', 'TunnelVision');
@@ -214,6 +220,11 @@ function parseJSON(text) {
 // ---------------------------------------------------------------------------
 
 async function handleSearch(_namedArgs, unnamedArg, { activeBooks }) {
+    if (canonOwnershipActive()) {
+        const result = await getCanonSearchDefinition().action({ action: 'search', query: String(unnamedArg || '') });
+        toastr.info(result, 'TunnelVision canon search', { escapeHtml: true });
+        return;
+    }
     const bookName = resolveAccessibleBook(activeBooks, 'read', 'search');
     if (!bookName) return;
 

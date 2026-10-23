@@ -1,5 +1,5 @@
 {
-    "display_name": "TunnelVision — Canon Evidence",
+    "display_name": "TunnelVision",
     "loading_order": 55,
     "requires": [],
     "optional": [],
@@ -8,6 +8,6 @@
     "css": "style.css",
     "author": "Coneja-Chibi; canon fork by fadust, with Saga evidence safeguards",
     "version": "0.1.0",
-    "description": "Read-only canon tree selection with source/version safeguards and NPC Codex evidence. Memory writers are not loaded.",
+    "description": "Full TunnelVision interface with validated canon retrieval and NPC Codex integration. BaiBai/Codex memory writers are disabled.",
     "homePage": "https://github.com/fadust/TunnelVision"
 }

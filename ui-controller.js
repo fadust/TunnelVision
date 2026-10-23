@@ -4,6 +4,7 @@
  */
 
 import { saveSettingsDebounced } from '../../../../script.js';
+import { applyOwnershipUI, canonOwnershipActive } from './canon/ownership.js';
 import { getContext } from '../../../st-context.js';
 import { world_names, loadWorldInfo, saveWorldInfo } from '../../../world-info.js';
 import { getAutoSummaryCount, resetAutoSummaryCount } from './auto-summary.js';
@@ -488,6 +489,7 @@ export function refreshUI() {
     if (currentLorebook) {
         loadLorebookUI(currentLorebook);
     }
+    applyOwnershipUI();
 }
 
 function onLorebookFilter() {
@@ -715,6 +717,7 @@ function onGlobalToggle() {
     $('#tv_main_controls').toggle(enabled);
     $('#tv_conditional_master_row').toggle(enabled);
     enabled ? registerTools() : unregisterTools();
+    if (canonOwnershipActive()) document.dispatchEvent(new CustomEvent('tunnelvision:canon-options'));
 }
 
 function onLorebookSelect() {
@@ -758,6 +761,7 @@ function updateIngestUI() {
         $('#tv_ingest_chat_info').text('No chat open. Open a chat to ingest messages.');
         $('#tv_ingest_chat').prop('disabled', true);
     }
+    applyOwnershipUI();
 }
 
 function onLorebookToggle() {

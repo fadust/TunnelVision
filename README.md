@@ -2,6 +2,8 @@
 
 *Stop making your AI guess what to remember. Give it a remote control and let it browse.* 🐰
 
+This maintained fork keeps the full TunnelVision interface, canon safeguards and NPC Codex integration. BaiBai/Codex memory writers are disabled; tree management and guarded retrieval remain available. See [CANON-FORK.md](CANON-FORK.md) for compatible controls, verification and rollback. The upstream guide below also describes memory features that remain visible but disabled in this fork.
+
 [![Status: Active Development](https://img.shields.io/badge/Status-Active%20Development-blueviolet.svg)](https://github.com/Coneja-Chibi/TunnelVision)
 [![SillyTavern Extension](https://img.shields.io/badge/SillyTavern-Extension-blue.svg)](https://docs.sillytavern.app/)
 [![BunnyMo Compatible](https://img.shields.io/badge/BunnyMo-Compatible-pink.svg)](https://github.com/Coneja-Chibi/BunnyMo)

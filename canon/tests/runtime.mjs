@@ -8,6 +8,7 @@ let state = { loreContext: {}, pendingLoreEntries: [], loreMatrix: [], loreSelec
 let books = { Original: { entries: Object.fromEntries(fixture.sources.filter(s => s.kind === 'lorebook').map(s => [s.uid, { uid: s.uid, content: s.text, key: ['Ari'], disable: false }])) } };
 const database = new Map(), vectors = new Map(), events = new Map(), prompts = new Map(), summaries = [];
 let providerCalls = 0, embeddingCalls = 0, dbFailure = false, delayProvider = null, delaySearch = false;
+let conditionalMet = false;
 const ctx = { characterId: 0, characters: [{ ...fixture.card, avatar: 'ari.png' }], getCurrentChatId: () => 'fixture',
     extensionSettings: { npc_state_delta: { scannerConnectionProfile: 'fixture-profile' } },
     getRequestHeaders: () => ({}), getTokenCountAsync: async text => Math.ceil(text.length / 4),
@@ -16,7 +17,7 @@ const ctx = { characterId: 0, characters: [{ ...fixture.card, avatar: 'ari.png' 
     eventSource: { on: (name, fn) => events.set(name, fn) } };
 const sandbox = vm.createContext({ console, structuredClone, crypto, TextEncoder, AbortController, AbortSignal, performance, btoa, setTimeout, clearTimeout,
     SillyTavern: { getContext: () => ctx }, CustomEvent: class { constructor(name, opts) { this.type = name; this.detail = opts.detail; } },
-    document: { dispatchEvent: event => summaries.push(event.detail) },
+    document: { dispatchEvent: event => summaries.push(event.detail), addEventListener: (name, fn) => events.set(name, fn) },
     fetch: async (url, options) => {
         const body = JSON.parse(options.body);
         if (dbFailure) throw new Error('Synthetic SQLite unavailable');
@@ -42,7 +43,7 @@ const stubs = {
     'lore-llm-client.js': { sendLoreRequest: async (_system, prompt, options) => {
         options.onRequest?.(); assert.equal(options.profileId, 'fixture-profile');
         if (delayProvider) await delayProvider;
-        const input = JSON.parse(prompt); if (input.tree) return JSON.stringify({ revision: input.revision, ids: [] }); providerCalls++; const analysis = structuredClone(fixture.analysis);
+        const input = JSON.parse(prompt); if (input.tree) return JSON.stringify({ revision: input.revision, ids: [], conditional_evaluations: (input.conditions || []).map(c => ({ evidence_id: c.evidence_id, met: conditionalMet })) }); providerCalls++; const analysis = structuredClone(fixture.analysis);
         const remap = id => id.replace('card:', 'card:ari.png:').replace('book:original:', 'book:Original:');
         analysis.facts = analysis.facts.map(f => ({ ...f, source: remap(f.source) })).filter(f => input.sources.some(s => s.id === f.source && s.text.includes(f.quote)));
         analysis.timeShift.source = remap(analysis.timeShift.source);
@@ -88,6 +89,12 @@ events.get('WORLD_INFO_ACTIVATED')(groups.globalLore);
 assert.ok(prompts.get('tunnelvision_lore_normal_relevance').includes('Mira Vale would be 44'));
 assert.ok(!prompts.get('tunnelvision_lore_normal_relevance').includes('greater healing'));
 assert.ok(ctx.getTokenCountAsync && Math.ceil([...prompts.values()].join('').length / 4) <= 1000);
+const safeView = await runtime.canonToolView();
+assert.ok(safeView.evidence.some(e => e.text.includes('storm magic')));
+assert.ok(!safeView.evidence.some(e => /fire apprentice|greater healing/.test(e.text)));
+assert.match(await runtime.retrieveCanonTool(safeView.revision, [safeView.evidence[0].id]), /already in the canon context/);
+assert.match(await runtime.retrieveCanonTool('old', [safeView.evidence[0].id]), /stale/);
+assert.match(await runtime.retrieveCanonTool(safeView.revision, ['raw-entry-id']), /Unknown/);
 // NPC scans outlive foreground generation and make quiet provider requests.
 // Prompt cleanup must not claim that their source evidence changed.
 const scanCanonToken = runtime.semanticCanonRevision();
@@ -97,6 +104,20 @@ await runtime.prepareSemanticCanon([], 'quiet');
 assert.equal(runtime.semanticCanonRevision(), scanCanonToken, 'Quiet scanner requests must not invalidate canon');
 events.get('GENERATION_STOPPED')(); assert.ok([...prompts.values()].every(text => !text));
 assert.equal(runtime.semanticCanonRevision(), scanCanonToken, 'Cancellation clears prompts, not source evidence');
+const toolText = await runtime.retrieveCanonTool(safeView.revision, safeView.evidence.map(e => e.id));
+assert.match(toolText, /storm magic/); assert.ok(Math.ceil(toolText.length / 4) <= 1000);
+assert.match(await runtime.retrieveCanonTool(safeView.revision, safeView.evidence.map(e => e.id)), /already in the canon context/);
+runtime.clearSemanticCanon();
+settings.tunnelvision = { bookInjectionModes: { Original: 'native' } };
+await runtime.prepareSemanticCanon([{ is_user: true, mes: 'Ari Vale asks about family.' }], 'normal');
+const nativeGroups = { globalLore: [], characterLore: [], chatLore: [], personaLore: [] };
+events.get('WORLDINFO_ENTRIES_LOADED')(nativeGroups);
+assert.ok(nativeGroups.globalLore.some(e => e.content.includes('Mira Vale would be 44')), 'Native content must exist before the host assembles WI strings');
+events.get('WORLD_INFO_ACTIVATED')(nativeGroups.globalLore);
+assert.ok(nativeGroups.globalLore.some(e => e.content.includes('Mira Vale would be 44')));
+assert.ok(!nativeGroups.globalLore.some(e => e.content.includes('fire apprentice')));
+assert.ok(!prompts.get('tunnelvision_lore_normal_relevance').includes('Mira Vale would be 44'), 'Native placement must not double-deliver canon');
+settings.tunnelvision = {};
 settings.loreNormalInjectionEnabled = false;
 await runtime.prepareSemanticCanon([{ is_user: true, mes: 'Ari Vale enters.' }], 'normal');
 assert.equal(runtime.semanticCanonStatus().selected.length, 0, 'Disabled tiers consume no generation budget');
@@ -106,6 +127,16 @@ assert.ok(runtime.semanticCanonStatus().selected.length, 'Tier changes invalidat
 settings.enabled = false; assert.equal(runtime.semanticCanonStatus().enabled, false); settings.enabled = true;
 runtime.invalidateCanon(); assert.notEqual(runtime.semanticCanonRevision(), scanCanonToken, 'Real source invalidation rejects NPC scan tokens'); runtime.syncCanonPrompts();
 await runtime.analyzeCanonSources();
+
+const conditionalUid = Object.keys(books.Original.entries)[0];
+const originalKeywords = books.Original.entries[conditionalUid].key;
+books.Original.entries[conditionalUid].key = ['[mood:calm]']; runtime.invalidateCanon(); await runtime.analyzeCanonSources();
+await runtime.prepareSemanticCanon([{ is_user: true, mes: 'Ari Vale asks about family.' }], 'normal');
+assert.ok(!runtime.semanticCanonStatus().selected.some(e => e.basis.some(b => b.source === `book:Original:${conditionalUid}`)), 'Unmet narrative conditions cannot re-enter through exact retrieval');
+conditionalMet = true;
+await runtime.prepareSemanticCanon([{ is_user: true, mes: 'Ari Vale calmly asks about family.' }], 'normal');
+assert.ok(runtime.semanticCanonStatus().selected.some(e => e.basis.some(b => b.source === `book:Original:${conditionalUid}`)), 'Met narrative conditions permit validated evidence');
+books.Original.entries[conditionalUid].key = originalKeywords; runtime.invalidateCanon(); await runtime.analyzeCanonSources();
 
 const accepted = structuredClone(state.pendingLoreEntries[0]);
 state.loreMatrix.push(accepted);

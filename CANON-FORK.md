@@ -1,6 +1,6 @@
 # Canon evidence fork
 
-This branch runs `canon-main.js`, a restricted canon runtime. It does **not** load upstream `index.js`, raw lore tools, slash-command writers, notebook, summaries, world simulation, post-turn extraction, or memory lifecycle. Existing TunnelVision settings are retained but those writers cannot run through this entry point. BaiBai remains completed-event memory; NPC Codex remains accepted actor state.
+This branch runs `canon-main.js` with the **full upstream TunnelVision interface**. It starts `index.js` under enforced canon ownership, retaining the tree editor/builders, search modes, selective retrieval, provider/embedding profiles, tool prompts, confirmations, diagnostics, language controls and import/export. Canon source/review controls live inside the full panel. Only memory writers overlapping BaiBai/Codex are disabled. BaiBai remains completed-event memory; NPC Codex remains accepted actor state.
 
 Upstream baseline: Coneja-Chibi/TunnelVision `cf84ad17ed0f9c9a57d0be5f219cba163706c876`. The compiler, storage, runtime checks and pure context/lifecycle helpers under `canon/` derive from fadust/Saga `34d44e73c79399abaa0bb52d062923687ad47065` (MentallyQuill; MIT notice in `canon/LICENSE-Saga`). Changes adapt ownership/storage/provider calls and add selection over a filtered, ephemeral collapsed evidence tree. This deliberately does not reuse upstream raw book summaries/previews, which would bypass version checks.
 
@@ -22,6 +22,30 @@ On an existing chat, the updated Saga bridge can supply a snapshot of the contex
 
 ## Verification
 
-Run `npm run test:canon` with the companion NPC Codex checkout at `../npc_state_delta` for the cross-repository admission/lock/death fixture. The port and runtime suites run independently with Node 24 and need no new dependencies. Also run the companion Codex test suite and Saga handover runtime regression. Synthetic provider tests verify the integration contract, not real-provider relevance or latency. Verify those in an isolated browser test chat before declaring live story delivery successful.
+Run `npm run test:canon` with the companion NPC Codex checkout at `../npc_codex` for the cross-repository admission/lock/death fixture. The port and runtime suites run independently with Node 24. Run `npm test` for upstream/interface tests. Synthetic provider tests verify the integration contract, not real-provider relevance or latency.
+
+## Full interface restoration — 23 October
+
+This supersedes the original restricted-UI design. Saved settings/data are retained; the runtime reads overlapping writer flags as false without resetting the saved values. Writer event processors and cleanup/hydration are not started. Disabled controls remain visible with an ownership explanation.
+
+| Retained | Canon-compatible behavior |
+|---|---|
+| Tree editor, metadata/LLM builders, node summaries, import/export | Original manual management UI; tree structure is projected over eligible evidence. Raw generated summaries/previews never become story evidence. |
+| Traversal/collapsed search, depth, unified/separate books, selective retrieval | Search uses validated evidence IDs. Ambiguous cross-book numeric UIDs are rejected; no raw-content fallback. |
+| Reorganize, Merge/Split; explicit merge/split/dedupe commands | Existing manual management paths, permissions and confirmations retained. Reorganize's list view uses guarded evidence. Source changes invalidate dependent canon analysis normally. |
+| Sidecar/embedding profiles, language, output caps, background timeout | Enabled profiles are honored; otherwise existing NPC scanner/canon embeddings remain the defaults. Truncated responses fail; cancellation reaches requests. Scanner settings are not rewritten. |
+| Auto Retrieval | Controls the scene selector; exact/vector evidence and explicit Search remain available when disabled. The user tree is filtered before selection. The 96,000-character ceiling remains. |
+| Smart Context | Shares the canon delivery gate, using its placement/entry/character limits. No second raw injector. |
+| Narrative conditions | Evaluated on filtered evidence in the existing selector. Unmet/unknown conditions stay withheld even from exact lookup. Enabled conditions can still require evaluation when Auto Retrieval is off. |
+| Native injection mode | Retains native placement for eligible filtered passages; no duplicate canon-slot delivery. Multi-source evidence still requires all source gates. |
+| Canon review and NPC bridge | Source/version, revision, ambiguity/no-match/unavailable, context, provenance, manual locks, knowledge and death contracts retained. |
+
+Disabled: Remember, Update, Forget, Summarize, Notebook, chat ingest, automatic summaries, post-generation/post-turn extraction, rolling world/actor state and automatic memory lifecycle. Commands for these writers explain ownership rather than writing. Existing saved memory is not deleted.
+
+Search results share the generation's 1,000-token whole-passage delivery ledger, including automatic/native delivery. Repeated tool calls do not create a fresh canon budget. User lower token/character caps apply. The upstream recurse/tool-display controls remain available.
+
+The focused interface suite loads the actual upstream entry and panel, checks writer non-activation with legacy flags enabled, and exercises guarded traversal/collapsed/selective search. Canon runtime checks include native placement timing, conditional filters, shared tool budgets and stale IDs.
+
+Known baseline: unchanged upstream `entry-manager.test.js` has 28 failures (25 passing), reproduced at deployed `63d630b`; no unrelated fixes or silent skips. The upstream lockfile omits optional packages for other platforms, so current npm rejects `npm ci`. Install the existing development dependencies with `npm install --ignore-scripts --package-lock=false` without rewriting the lockfile.
 
 Rollback: restore the recorded Saga/Codex pre-deployment commits and move this newly installed extension outside the live third-party folder; reload. Retain the new metadata for recovery. Do not reset user settings, chats or authoring files.

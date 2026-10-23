@@ -6,6 +6,8 @@
  */
 
 import { ToolManager } from '../../../tool-calling.js';
+import { canonOwnershipActive, disabledTools } from './canon/ownership.js';
+import { selectedCanonBooks } from './canon/context/semantic-canon.js';
 import { selected_world_info, world_info, loadWorldInfo, METADATA_KEY } from '../../../world-info.js';
 import { characters, this_chid, chat_metadata } from '../../../../script.js';
 import { selected_group, groups } from '../../../group-chats.js';
@@ -123,6 +125,7 @@ export function getTrackerListString() {
  * @returns {Promise<string>}
  */
 async function getTrackerList() {
+    if (canonOwnershipActive()) return '';
     const trackerNames = [];
 
     for (const bookName of getActiveTunnelVisionBooks()) {
@@ -157,6 +160,7 @@ async function getTrackerList() {
  * @returns {string[]}
  */
 export function getActiveTunnelVisionBooks() {
+    if (canonOwnershipActive()) return selectedCanonBooks();
     const candidates = new Set();
 
     // 1. Global lorebooks (selected in World Info dropdown)
@@ -221,7 +225,7 @@ function _addCharacterBooks(candidates, charIdx) {
 
 export async function inspectToolRuntimeState() {
     const settings = getSettings();
-    const disabled = settings.disabledTools || {};
+    const disabled = disabledTools(settings);
     const activeBooks = getActiveTunnelVisionBooks();
     const disabledToolNames = ALL_TOOL_NAMES.filter(name => disabled[name]);
     const expectedToolNames = ALL_TOOL_NAMES.filter(name => !disabled[name]);
@@ -650,7 +654,7 @@ function buildGuideDescription(allDefs, disabled) {
         desc += `- ${name}: ${compact}\n`;
     }
 
-    desc += `\nUsage guidelines:
+    if (!canonOwnershipActive()) desc += `\nUsage guidelines:
 - ALWAYS Search before Remember to avoid duplicates
 - Prefer Update over Remember when information already exists
 - Use Merge to consolidate overlapping entries
@@ -678,6 +682,7 @@ function buildGuideDescription(allDefs, disabled) {
  */
 export async function registerTools() {
     unregisterTools();
+    if (getSettings().globalEnabled === false) return;
 
     const activeBooks = getActiveTunnelVisionBooks();
     if (activeBooks.length === 0) {
@@ -689,7 +694,7 @@ export async function registerTools() {
     _trackerListCache = await getTrackerList();
 
     const settings = getSettings();
-    const disabled = settings.disabledTools || {};
+    const disabled = disabledTools(settings);
 
     const allDefs = getAllToolDefinitions();
 
@@ -769,7 +774,7 @@ export async function registerTools() {
                     // Return full descriptions on demand
                     if (args?.tool) {
                         const match = allDefs.find(({ name }) => name === args.tool || name.toLowerCase().includes(String(args.tool).toLowerCase()));
-                        if (match?.def) {
+                        if (match?.def && !disabled[match.name]) {
                             return `Full instructions for ${match.name}:\n\n${match.def.description}`;
                         }
                         return `Tool "${args.tool}" not found. Available: ${allDefs.filter(({ name }) => !disabled[name]).map(({ name }) => name).join(', ')}`;

@@ -6,6 +6,8 @@
  */
 
 import { getTree, findNodeById, getSettings, getAllEntryUids } from '../tree-store.js';
+import { canonOwnershipActive } from '../canon/ownership.js';
+import { getCanonSearchDefinition } from '../canon/search.js';
 import { moveEntry, createCategory, listNodeEntries } from '../entry-manager.js';
 import { getWritableBooks, resolveTargetBook, getBookListWithDescriptions } from '../tool-registry.js';
 
@@ -100,6 +102,7 @@ ${bookDesc}`,
                 }
 
                 case 'list_entries': {
+                    if (canonOwnershipActive()) return getCanonSearchDefinition().action({ action: 'navigate', node_id: args.node_id });
                     if (!args.node_id) {
                         return 'list_entries requires a "node_id" to list entries from.';
                     }

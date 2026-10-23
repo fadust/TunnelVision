@@ -58,8 +58,8 @@ assert.equal(buildCanonQuery([{ mes: 'accepted response', swipes: ['rejected swi
 await assert.rejects(retrieveCanon(view, 'Ari', { ...options, signal: AbortSignal.abort() }));
 console.log('Layer 1 shared fixture: chronology, mixed versions, family dependencies, ambiguous identity, proposal review, deduplication, budgets, cancellation, and grounded passages passed.');
 
-const { resolveSagaAdmissions, sagaCanonEntries } = await import('../../../npc_state_delta/saga-canon.js');
-const { applyCanonSeed, parseCanonSeed } = await import('../../../npc_state_delta/canon-seed.js');
+const { resolveSagaAdmissions, sagaCanonEntries } = await import('../../../npc_codex/saga-canon.js');
+const { applyCanonSeed, parseCanonSeed } = await import('../../../npc_codex/canon-seed.js');
 const bridge = { queryCanon: (query, opts) => retrieveCanon(view, query, { ...options, purpose: 'story', ...opts }) };
 const registry = [{ id: 'accepted-ari', name: 'Ari Vale', personality: 'Patient after accepted development', speech: 'Manual voice', manualProfileFields: ['speech'] }];
 const admissions = await resolveSagaAdmissions({ npcs: [{ name: 'Ari' }, { name: 'Ari Vale' }, { name: 'Zora Newcomer' }] }, registry, { bridge });

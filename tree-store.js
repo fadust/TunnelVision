@@ -9,6 +9,7 @@ import { saveSettingsDebounced } from '../../../../script.js';
 import { getContext } from '../../../st-context.js';
 import { loadWorldInfo } from '../../../world-info.js';
 import { trigramSimilarity } from './agent-utils.js';
+import { ownershipSettings, canonOwnershipActive } from './canon/ownership.js';
 
 const EXTENSION_NAME = 'tunnelvision';
 const TRACKER_TITLE_PREFIX = /^\[tracker[^\]]*\]/i;
@@ -99,6 +100,11 @@ export function deleteTree(lorebookName) {
  */
 export function isLorebookEnabled(lorebookName) {
     ensureSettings();
+    if (canonOwnershipActive()) {
+        const ctx = getContext(), ext = ctx.extensionSettings || extension_settings;
+        const avatar = ctx.characters?.[ctx.characterId]?.avatar;
+        return (ext.tunnelvision?.canon?.layer1Sources?.[avatar] || ext.saga?.layer1Sources?.[avatar] || []).includes(lorebookName);
+    }
     return extension_settings[EXTENSION_NAME].enabledLorebooks[lorebookName] === true;
 }
 
@@ -109,6 +115,16 @@ export function isLorebookEnabled(lorebookName) {
  */
 export function setLorebookEnabled(lorebookName, enabled) {
     ensureSettings();
+    if (canonOwnershipActive()) {
+        const ctx = getContext(), avatar = ctx.characters?.[ctx.characterId]?.avatar;
+        if (!avatar) return;
+        const ext = ctx.extensionSettings || extension_settings;
+        const settings = extension_settings[EXTENSION_NAME]; settings.canon ||= {}; settings.canon.layer1Sources ||= {};
+        const books = new Set(settings.canon.layer1Sources[avatar] || ext.saga?.layer1Sources?.[avatar] || []);
+        if (enabled) books.add(lorebookName); else books.delete(lorebookName);
+        settings.canon.layer1Sources[avatar] = [...books];
+        document.dispatchEvent(new CustomEvent('tunnelvision:canon-options'));
+    }
     extension_settings[EXTENSION_NAME].enabledLorebooks[lorebookName] = enabled;
     saveSettingsDebounced();
 }
@@ -462,7 +478,7 @@ function ensureSettings() {
 
 export function getSettings() {
     ensureSettings();
-    return extension_settings[EXTENSION_NAME];
+    return ownershipSettings(extension_settings[EXTENSION_NAME]);
 }
 
 function deduplicateUidsAcrossTree(node) {

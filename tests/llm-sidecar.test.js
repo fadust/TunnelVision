@@ -39,6 +39,29 @@ const validEmbeddingProfile = {
     format: 'openai',
 };
 
+describe('canon provider boundary', () => {
+    it('honors the configured output cap and rejects truncated responses', async () => {
+        mockSidecarProfile = { ...validProfile, maxTokens: 700 };
+        const request = vi.fn(async (_url, options) => {
+            expect(JSON.parse(options.body).max_tokens).toBe(700);
+            return { ok: true, json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '{}' } }] }) };
+        });
+        vi.stubGlobal('fetch', request);
+        try { await expect(sidecarGenerate({ prompt: 'canon', maxTokens: 8192 })).rejects.toThrow('truncated'); }
+        finally { vi.unstubAllGlobals(); }
+    });
+    it('passes caller cancellation to the actual request', async () => {
+        mockSidecarProfile = validProfile;
+        const controller = new AbortController();
+        vi.stubGlobal('fetch', vi.fn(async (_url, options) => new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+            controller.abort();
+        })));
+        try { await expect(sidecarGenerate({ prompt: 'canon', signal: controller.signal })).rejects.toMatchObject({ cancelled: true }); }
+        finally { vi.unstubAllGlobals(); }
+    });
+});
+
 beforeEach(() => {
     mockSidecarProfile = null;
     mockEmbeddingProfile = null;

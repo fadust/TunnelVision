@@ -1,2 +1,4 @@
 CHANGELOG.md
 .playwright-mcp/
+node_modules/
+.baseline-check/

@@ -11,6 +11,8 @@
  */
 
 import { loadWorldInfo } from '../../../../world-info.js';
+import { canonOwnershipActive } from '../canon/ownership.js';
+import { getCanonSearchDefinition, getCanonTreeOverview } from '../canon/search.js';
 import {
     getTree,
     findNodeById,
@@ -595,6 +597,7 @@ function _collectSampleNodeIds(max = 8) {
  * @returns {string} Tree overview text to append to the description, or empty string
  */
 export function getTreeOverview() {
+    if (canonOwnershipActive()) return getCanonTreeOverview();
     const activeBooks = getReadableBooks();
     if (activeBooks.length === 0) return '';
 
@@ -655,6 +658,7 @@ function hasAnyValidTree() {
  * @returns {Object|null} Tool definition or null if no active lorebooks
  */
 export function getDefinition() {
+    if (canonOwnershipActive()) return getCanonSearchDefinition();
     const activeBooks = getReadableBooks();
     if (activeBooks.length === 0) return null;
 

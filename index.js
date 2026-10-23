@@ -22,7 +22,8 @@ import { eventSource, event_types, extension_prompt_types, extension_prompt_role
 import { getContext } from '../../../st-context.js';
 import { ToolManager } from '../../../tool-calling.js';
 import { renderExtensionTemplateAsync } from '../../../extensions.js';
-import { getSettings, isLorebookEnabled, setLorebookEnabled, getTree, saveTree, isNativeInjectionBook, migrateSelectedLorebook } from './tree-store.js';
+import { getSettings, isLorebookEnabled, setLorebookEnabled, getTree, saveTree, isNativeInjectionBook, migrateSelectedLorebook, SETTING_DEFAULTS } from './tree-store.js';
+import { canonOwnershipActive } from './canon/ownership.js';
 import { preflightToolRuntimeState, registerTools, getActiveTunnelVisionBooks, applyRecurseLimit } from './tool-registry.js';
 import { resetSearchLoopTracker, resetSelectiveRetrievalTracker } from './tools/search.js';
 import { buildNotebookPrompt, resetNotebookWriteGuard } from './tools/notebook.js';
@@ -72,7 +73,7 @@ let _stateRefreshTimer = null;
 // point in the pipeline where an extension can stop the main model cleanly.
 // Aborting ST's abortController from GENERATION_STOPPED does not: Generate
 // replaces it right after the GENERATION_STARTED await it was blocked on.
-globalThis.TunnelVision_generateInterceptor = function (_chat, _contextSize, abort, _type) {
+if (!canonOwnershipActive()) globalThis.TunnelVision_generateInterceptor = function (_chat, _contextSize, abort, _type) {
     if (!_stopRequestedDuringRetrieval) return;
     _stopRequestedDuringRetrieval = false;
     console.log('[TunnelVision] Stop pressed during retrieval — cancelling the main model request');
@@ -103,18 +104,15 @@ async function init() {
     // Register /tv-* slash commands
     initCommands();
 
-    // Wire up auto-summary interval tracking
-    initAutoSummary();
-    initSummaryCollapse();
-
-    // Wire up post-turn processor (tracker updates, fact extraction, scene archiving)
-    initPostTurnProcessor();
-
-    // Wire up rolling world state, smart context, and memory lifecycle —
-    // each is a no-op per event until its own *Enabled setting is turned on.
-    initWorldState();
-    initSmartContext();
-    initMemoryLifecycle();
+    // BaiBai and Codex own story/actor writes; Smart Context shares the canon gate.
+    if (!canonOwnershipActive()) {
+        initAutoSummary();
+        initSummaryCollapse();
+        initPostTurnProcessor();
+        initWorldState();
+        initSmartContext();
+        initMemoryLifecycle();
+    }
 
     // Inject condition editor into ST's base lorebook editor
     initWIConditionInjector();
@@ -220,7 +218,7 @@ async function init() {
     }
 
     // Post-generation sidecar writer (remember/update after model responds)
-    if (event_types.MESSAGE_RECEIVED) {
+    if (!canonOwnershipActive() && event_types.MESSAGE_RECEIVED) {
         eventSource.on(event_types.MESSAGE_RECEIVED, async (messageIndexOrId, type) => {
             // ST's ChatMessage has no `mesId` field (it only exists as a DOM
             // attribute); MESSAGE_RECEIVED already passes the chat array index.
@@ -236,7 +234,7 @@ async function init() {
     }
 
     // Clean up orphaned tool invocations when messages are deleted
-    if (event_types.MESSAGE_DELETED) {
+    if (!canonOwnershipActive() && event_types.MESSAGE_DELETED) {
         eventSource.on(event_types.MESSAGE_DELETED, async (messageIndexOrId) => {
             cleanOrphanedToolInvocations();
 
@@ -268,12 +266,12 @@ async function onChatChanged() {
     autoDetectLorebooks();
     // Rehydrate sidecar snapshots from this chat's metadata so revert-on-deletion
     // survives a page reload / chat switch.
-    await hydrateSnapshots();
+    if (!canonOwnershipActive()) await hydrateSnapshots();
     // One-time migration of the legacy global selection into this chat's metadata.
     // Active-book guard ensures a stale cross-character book is never copied.
     migrateSelectedLorebook(getActiveTunnelVisionBooks());
     // Catch slash command deletions (like /cut) which might not emit MESSAGE_DELETED
-    await cleanInvalidSidecarMemories();
+    if (!canonOwnershipActive()) await cleanInvalidSidecarMemories();
     // refreshUI + guarded registerTools (autoDetect re-run inside is idempotent)
     await refreshRuntimeState('chat changed');
 }
@@ -688,6 +686,7 @@ function injectConditionButton(entryEl, bookName, bookData) {
  */
 
 function onWorldInfoEntriesLoaded(data) {
+    if (canonOwnershipActive()) return; // Canon owns native eligibility and suppression.
     const settings = getSettings();
     if (settings.globalEnabled === false) return;
 
@@ -1084,7 +1083,7 @@ async function onGenerationStarted(type, opts, dryRun) {
     }
 
     // Sidecar auto-retrieval: pre-fetch relevant entries before generation (first pass only)
-    if (settings.sidecarAutoRetrieval && settings.globalEnabled !== false) {
+    if (!canonOwnershipActive() && settings.sidecarAutoRetrieval && settings.globalEnabled !== false) {
         try {
             await runSidecarRetrieval(type);
         } catch (err) {
@@ -1110,7 +1109,9 @@ async function onGenerationStarted(type, opts, dryRun) {
         && runtimeState.expectedToolNames.length > 0
         && runtimeState.eligibleToolNames.length > 0
     ) {
-        const prompt = settings.mandatoryPromptText || '[IMPORTANT INSTRUCTION: You MUST use at least one TunnelVision tool call this turn.]';
+        const prompt = canonOwnershipActive() && settings.mandatoryPromptText === SETTING_DEFAULTS.mandatoryPromptText
+            ? '[Use TunnelVision_Search for relevant canon. BaiBai and NPC Codex handle memory updates.]'
+            : settings.mandatoryPromptText || '[IMPORTANT INSTRUCTION: You MUST use at least one TunnelVision tool call this turn.]';
         setExtensionPrompt(TV_PROMPT_KEY, prompt, mandatoryPosition, mandatoryDepth, false, mandatoryRole);
     } else {
         setExtensionPrompt(TV_PROMPT_KEY, '', mandatoryPosition, mandatoryDepth, false, mandatoryRole);

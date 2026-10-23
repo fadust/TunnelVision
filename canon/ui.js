@@ -2,12 +2,12 @@ import { getSettings, getState, saveState } from './state/state-manager.js';
 import { canonCardKey, semanticCanonStatus, invalidateCanon, analyzeCanonSources } from './context/semantic-canon.js';
 
 export function mountCanonUI() {
-    const container = document.getElementById('extensions_settings2');
+    const container = document.querySelector('#tunnelvision_settings .tv-settings-body') || document.getElementById('extensions_settings2');
     if (!container || document.getElementById('tv-canon-panel')) return;
     const panel = document.createElement('details');
     panel.id = 'tv-canon-panel';
-    panel.innerHTML = `<summary style="font-size:16px">TunnelVision — Canon Evidence</summary>
-        <p>Canon retrieval only. Memory writers, notebook and raw lore tools are not loaded. BaiBai owns completed events; NPC Codex owns actors.</p>
+    panel.innerHTML = `<summary style="font-size:16px">Canon safeguards and NPC Codex</summary>
+        <p>Search and automatic retrieval use validated canon evidence. BaiBai owns completed-event memory; NPC Codex owns actor state. Their overlapping writers are disabled; lorebook editing and tree organization remain available.</p>
         <label><input type="checkbox" data-enabled> Enable canon evidence</label>
         <p>Original lorebooks for the selected character:</p><select multiple size="5" data-books aria-label="Original canon lorebooks"></select>
         <button type="button" data-analyze>Analyze sources</button>
@@ -29,6 +29,7 @@ export function mountCanonUI() {
         const settings = ownSettings();
         settings.layer1Sources = { ...getSettings().layer1Sources, [canonCardKey()]: [...event.target.selectedOptions].map(o => o.value) };
         await saveSettings(); await refresh();
+        const { refreshUI } = await import('../ui-controller.js'); refreshUI();
     });
     panel.querySelector('[data-analyze]').addEventListener('click', refresh);
     function button(label, action) {

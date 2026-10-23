@@ -8,6 +8,7 @@ import { ToolManager } from '../../../tool-calling.js';
 import { main_api, online_status, event_types, generateRaw, saveSettingsDebounced } from '../../../../script.js';
 import { callGenericPopup, POPUP_TYPE } from '../../../popup.js';
 import { extension_settings } from '../../../extensions.js';
+import { canonOwnershipActive, disabledTools } from './canon/ownership.js';
 import {
     getTree,
     createEmptyTree,
@@ -330,7 +331,7 @@ async function checkToolRuntimeDuringDiagnostics() {
 /** Report which tools the user has manually disabled via Advanced Settings. */
 function checkDisabledTools() {
     const settings = getSettings();
-    const disabled = settings.disabledTools || {};
+    const disabled = disabledTools(settings);
     const disabledNames = ALL_TOOL_NAMES.filter(name => disabled[name]);
 
     if (disabledNames.length === 0) {
@@ -339,7 +340,7 @@ function checkDisabledTools() {
     if (disabledNames.length === ALL_TOOL_NAMES.length) {
         return warn('All TunnelVision tools are disabled in Advanced Settings. The AI cannot use any memory features.');
     }
-    return warn(`${disabledNames.length} tool(s) disabled: ${disabledNames.map(n => n.replace('TunnelVision_', '')).join(', ')}`);
+    return (canonOwnershipActive() ? pass : warn)(`${disabledNames.length} tool(s) disabled${canonOwnershipActive() ? ' under BaiBai/NPC Codex ownership' : ''}: ${disabledNames.map(n => n.replace('TunnelVision_', '')).join(', ')}`);
 }
 
 /** Check confirm tool configuration for invalid references. */

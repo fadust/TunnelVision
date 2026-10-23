@@ -2,6 +2,15 @@ import { assertLoreResponseText } from './lore-response-normalizer.js';
 
 export async function sendLoreRequest(system, prompt, options = {}) {
     options.signal?.throwIfAborted();
+    const settings = globalThis.SillyTavern?.getContext?.()?.extensionSettings?.tunnelvision;
+    if (settings?.sidecarProfile?.enabled) {
+        const { sidecarGenerate } = await import('../../llm-sidecar.js');
+        options.onRequest?.();
+        const text = await sidecarGenerate({ systemPrompt: [system, settings.backgroundPromptAddendum, settings.targetLanguage && `Respond in ${settings.targetLanguage}.`].filter(Boolean).join('\n'), prompt, signal: options.signal, maxTokens: options.maxTokens });
+        options.signal?.throwIfAborted();
+        if (typeof text !== 'string' || text.length > 262144 || !text.trim()) throw new Error('Invalid canon provider response');
+        return text;
+    }
     const service = globalThis.SillyTavern?.getContext?.()?.ConnectionManagerRequestService;
     if (!options.profileId || !service?.sendRequest) throw new Error('Select an NPC Codex scanner connection profile first');
     options.onRequest?.();

@@ -7,6 +7,7 @@ export function getSettings() {
     const ext = host()?.extensionSettings || {};
     const own = ext.tunnelvision?.canon || {};
     return { semanticCanonTokenBudget: 1000, ...ext.saga, ...own,
+        tunnelvision: ext.tunnelvision || {},
         enabled: ext.tunnelvision?.globalEnabled !== false && own.enabled !== false,
         semanticCanonEnabled: own.semanticCanonEnabled ?? ext.saga?.semanticCanonEnabled ?? true };
 }
