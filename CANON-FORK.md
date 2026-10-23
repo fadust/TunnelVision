@@ -55,3 +55,9 @@ The focused interface suite loads the actual upstream entry and panel, checks wr
 Known baseline: unchanged upstream `entry-manager.test.js` has 28 failures (25 passing), reproduced at deployed `63d630b`; no unrelated fixes or silent skips. The upstream lockfile omits optional packages for other platforms, so current npm rejects `npm ci`. Install the existing development dependencies with `npm install --ignore-scripts --package-lock=false` without rewriting the lockfile.
 
 Rollback: restore the recorded Saga/Codex pre-deployment commits and move this newly installed extension outside the live third-party folder; reload. Retain the new metadata for recovery. Do not reset user settings, chats or authoring files.
+
+## Structured canon provider requests — 24 October
+
+Canon analysis requests JSON-object output on the OpenAI-compatible sidecar route. The application still parses and validates every reference against the exact original passage; provider JSON mode does not establish evidence or bypass the compiler. Other sidecar operations retain ordinary text output. Direct generation now honours the existing background-call timeout instead of its hidden fixed90s limit; embedding/connectivity defaults are unchanged. Caller cancellation and truncation rejection remain enforced. Two provider regressions cover JSON opt-in and configured timeout (75 focused checks total).
+
+The live MiniMax retry failed with malformed JSON; the user authorized DeepSeek latest as fallback. Selected the existing NanoGPT DeepSeek V4.1 Flash1017 utility model/scanner profile, leaving the story connection on Kimi. NanoGPT documents the model suffix `:reasoning-effort/low` for clients without effort controls, used for the direct analysis route after a thinking request exceeded90s. Provider reference: https://docs.nano-gpt.com/api-reference/endpoint/chat-completion . Live results are recorded separately; these changes do not imply a successful complete-book analysis.

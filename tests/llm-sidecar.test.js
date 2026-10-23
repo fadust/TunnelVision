@@ -2,9 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 let mockSidecarProfile = null;
 let mockEmbeddingProfile = null;
+let mockTimeout;
 
 vi.mock('../tree-store.js', () => ({
-    getSettings: () => ({ sidecarProfile: mockSidecarProfile, embeddingProfile: mockEmbeddingProfile }),
+    getSettings: () => ({ sidecarProfile: mockSidecarProfile, embeddingProfile: mockEmbeddingProfile, llmCallTimeout: mockTimeout }),
     getTree: vi.fn(() => null),
     getTrackerUids: vi.fn(() => []),
 }));
@@ -40,6 +41,35 @@ const validEmbeddingProfile = {
 };
 
 describe('canon provider boundary', () => {
+    it('requests JSON only when the caller requires it', async () => {
+        mockSidecarProfile = validProfile;
+        const bodies = [];
+        vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+            bodies.push(JSON.parse(options.body));
+            return { ok: true, json: async () => ({ choices: [{ message: { content: '{}' } }] }) };
+        }));
+        try {
+            await sidecarGenerate({ prompt: 'JSON canon', json: true });
+            await sidecarGenerate({ prompt: 'ordinary text' });
+            expect(bodies[0].response_format).toEqual({ type: 'json_object' });
+            expect(bodies[1]).not.toHaveProperty('response_format');
+        } finally { vi.unstubAllGlobals(); }
+    });
+    it('uses the configured background timeout instead of the fixed 90 seconds', async () => {
+        mockSidecarProfile = validProfile;
+        mockTimeout = 120000;
+        vi.useFakeTimers();
+        vi.stubGlobal('fetch', vi.fn(async (_url, options) => new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+        })));
+        try {
+            const pending = expect(sidecarGenerate({ prompt: 'canon' })).rejects.toThrow('120s');
+            await vi.advanceTimersByTimeAsync(90000);
+            expect(vi.getTimerCount()).toBe(1);
+            await vi.advanceTimersByTimeAsync(30000);
+            await pending;
+        } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+    });
     it('honors the configured output cap and rejects truncated responses', async () => {
         mockSidecarProfile = { ...validProfile, maxTokens: 700 };
         const request = vi.fn(async (_url, options) => {
@@ -63,6 +93,7 @@ describe('canon provider boundary', () => {
 });
 
 beforeEach(() => {
+    mockTimeout = undefined;
     mockSidecarProfile = null;
     mockEmbeddingProfile = null;
     resetCircuitBreaker();

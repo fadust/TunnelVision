@@ -153,7 +153,8 @@ export function isEmbeddingSupported() {
 async function _fetchJson(url, options, label) {
     const controller = new AbortController();
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, SIDECAR_DEFAULT_TIMEOUT_MS);
+    const timeoutMs = label === 'Sidecar' ? getSettings()?.llmCallTimeout || SIDECAR_DEFAULT_TIMEOUT_MS : SIDECAR_DEFAULT_TIMEOUT_MS;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     const tracked = _retrievalScopeDepth > 0;
     if (tracked) _activeFetches.add(controller);
     let response;
@@ -163,7 +164,7 @@ async function _fetchJson(url, options, label) {
         if (error?.name === 'AbortError' || options.signal?.aborted) {
             if (timedOut) {
                 // A bare AbortError reads as "signal is aborted without reason" — name the timeout.
-                throw new Error(`${label} timed out after ${SIDECAR_DEFAULT_TIMEOUT_MS / 1000}s — the sidecar endpoint did not respond in time.`);
+                throw new Error(`${label} timed out after ${timeoutMs / 1000}s — the sidecar endpoint did not respond in time.`);
             }
             // External abort (user pressed stop) — tag it so callers stay quiet
             // and the circuit breaker doesn't count it as a failure.
@@ -203,7 +204,7 @@ function _modelsBase(endpoint) {
  * @param {{prompt:string, systemPrompt?:string}} opts
  * @returns {Promise<string>}
  */
-export async function sidecarGenerate({ prompt, systemPrompt, signal, maxTokens: requestedMaxTokens }) {
+export async function sidecarGenerate({ prompt, systemPrompt, signal, maxTokens: requestedMaxTokens, json = false }) {
     signal?.throwIfAborted();
     if (isCircuitOpen()) {
         throw new Error('Sidecar circuit breaker open — too many consecutive failures. Check the Sidecar LLM configuration.');
@@ -221,7 +222,7 @@ export async function sidecarGenerate({ prompt, systemPrompt, signal, maxTokens:
         } else if (format === 'google') {
             result = await _callGoogle({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal });
         } else {
-            result = await _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal });
+            result = await _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal, json });
         }
         _recordSuccess();
         return typeof result === 'string' ? result.replace(THINK_BLOCK_RE, '').trim() : result;
@@ -232,7 +233,7 @@ export async function sidecarGenerate({ prompt, systemPrompt, signal, maxTokens:
     }
 }
 
-async function _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal }) {
+async function _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temperature, maxTokens, signal, json }) {
     const url = _normalizeChatEndpoint(endpoint);
     const headers = { 'Content-Type': 'application/json' };
     // Omitted rather than sent empty: `Bearer ` with no credential is malformed,
@@ -250,7 +251,7 @@ async function _callOpenAI({ endpoint, apiKey, model, systemPrompt, prompt, temp
         signal,
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+        body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens, ...(json ? { response_format: { type: 'json_object' } } : {}) }),
     }, 'Sidecar');
     if (data.choices?.[0]?.finish_reason === 'length') throw new Error('Sidecar response was truncated');
     return data.choices?.[0]?.message?.content || '';

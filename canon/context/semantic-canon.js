@@ -184,7 +184,7 @@ export async function analyzeCanonSources({ force = false } = {}) {
                     metrics.analysisInputEstimatedTokens += Math.ceil((CANON_ANALYSIS_PROMPT.length + prompt.length) / 4);
                     let failure;
                     for (let attempt = 0; attempt < 2; attempt++) {
-                        const response = await sendLoreRequest(CANON_ANALYSIS_PROMPT, failure ? JSON.stringify({ sources: cleanRows, context, validationError: failure }) : prompt, { profileId, signal, maxTokens: settings.tunnelvision?.sidecarProfile?.maxTokens || 8192, maxRetries: 0,
+                        const response = await sendLoreRequest(CANON_ANALYSIS_PROMPT, failure ? JSON.stringify({ sources: cleanRows, context, validationError: failure }) : prompt, { profileId, signal, json: true, maxTokens: settings.tunnelvision?.sidecarProfile?.maxTokens || 8192, maxRetries: 0,
                             onRequest: () => { metrics.analysisCalls++; }, onUsage: usage => {
                                 if (Number.isFinite(usage?.prompt_tokens)) metrics.providerReportedInputTokens = (metrics.providerReportedInputTokens || 0) + usage.prompt_tokens;
                                 if (Number.isFinite(usage?.completion_tokens)) metrics.providerReportedOutputTokens = (metrics.providerReportedOutputTokens || 0) + usage.completion_tokens;

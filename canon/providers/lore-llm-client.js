@@ -6,7 +6,7 @@ export async function sendLoreRequest(system, prompt, options = {}) {
     if (settings?.sidecarProfile?.enabled) {
         const { sidecarGenerate } = await import('../../llm-sidecar.js');
         options.onRequest?.();
-        const text = await sidecarGenerate({ systemPrompt: [system, settings.backgroundPromptAddendum, settings.targetLanguage && `Respond in ${settings.targetLanguage}.`].filter(Boolean).join('\n'), prompt, signal: options.signal, maxTokens: options.maxTokens });
+        const text = await sidecarGenerate({ systemPrompt: [system, settings.backgroundPromptAddendum, settings.targetLanguage && `Respond in ${settings.targetLanguage}.`].filter(Boolean).join('\n'), prompt, signal: options.signal, maxTokens: options.maxTokens, json: options.json });
         options.signal?.throwIfAborted();
         if (typeof text !== 'string' || text.length > 262144 || !text.trim()) throw new Error('Invalid canon provider response');
         return text;
