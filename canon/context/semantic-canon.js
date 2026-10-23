@@ -139,7 +139,7 @@ export async function analyzeCanonSources({ force = false } = {}) {
     if (getSettings().enabled === false || !getSettings().semanticCanonEnabled || !canonCardKey()) return null;
     if (running && !force) return running;
     controller?.abort(); const ownController = new AbortController(); controller = ownController;
-    const signal = AbortSignal.any([ownController.signal, AbortSignal.timeout(120000)]);
+    let signal = AbortSignal.any([ownController.signal, AbortSignal.timeout(120000)]);
     const owner = `${canonCardKey()}|${chatKey()}`, settings = getSettings();
     const store = storeFor(settings);
     let pendingSummary;
@@ -171,6 +171,8 @@ export async function analyzeCanonSources({ force = false } = {}) {
             }
             if (batch.length) batches.push([...cardRows, ...batch]);
             if (!batches.length) batches.push(cardRows);
+            // A whole book needs several bounded requests, plus time to index their evidence.
+            signal = AbortSignal.any([ownController.signal, AbortSignal.timeout((batches.length + 1) * (settings.tunnelvision?.llmCallTimeout || 120000))]);
             const analysis = { entities: [], facts: [], proposals: [], timeShift: null };
             for (const batchRows of batches) {
                 const cleanRows = analysisPassages(batchRows);

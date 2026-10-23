@@ -1,13 +1,14 @@
 // Keep the upstream interface; story retrieval still passes the canon gate.
 import { enableCanonOwnership } from './canon/ownership.js';
 import { getState, saveState } from './canon/state/state-manager.js';
-import { installCanonEvents, querySemanticCanon, semanticCanonStatus, semanticCanonRevision, prepareSemanticCanon } from './canon/context/semantic-canon.js';
+import { analyzeCanonSources, installCanonEvents, querySemanticCanon, semanticCanonStatus, semanticCanonRevision, prepareSemanticCanon } from './canon/context/semantic-canon.js';
 import { mountCanonUI } from './canon/ui.js';
 
 enableCanonOwnership();
 
 globalThis.TunnelVision = { ...globalThis.TunnelVision, bridge: {
     queryCanon: querySemanticCanon, canonStatus: semanticCanonStatus, canonRevision: semanticCanonRevision,
+    ensureReady: async () => { if (!semanticCanonStatus().enabled) return 'not active'; const snapshot = await analyzeCanonSources(); return snapshot?.view.status || 'unavailable'; },
 } };
 
 let stopped = false;

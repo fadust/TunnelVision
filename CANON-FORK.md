@@ -24,6 +24,8 @@ On an existing chat, the updated Saga bridge can supply a snapshot of the contex
 
 Source analysis uses application-numbered passages. The model returns references; the application restores exact source text before the unchanged compiler checks compatibility, chronology and identity evidence. Malformed JSON, unknown references or incomplete evidence receive one bounded correction attempt; a second failure stays unavailable. Version 2 cache keys prevent reuse of the earlier quotation-copying analysis. No permissive JSON repair, raw-lore fallback or new actor/memory writer is introduced.
 
+Turn Queue can await `TunnelVision.bridge.ensureReady()` before prompt assembly. Whole-book analysis allows one configured timeout per source batch plus an indexing allowance; each provider call remains bounded and chat/source changes still cancel stale work. The old two-minute whole-book deadline could cancel a valid first batch before later batches completed.
+
 Run `npm run test:canon` with the companion NPC Codex checkout at `../npc_codex` for the cross-repository admission/lock/death fixture. The port and runtime suites run independently with Node 24. Run `npm test` for upstream/interface tests. Synthetic provider tests verify the integration contract, not real-provider relevance or latency.
 
 ## Full interface restoration — 23 October
